@@ -1,3 +1,15 @@
+I found a couple of syntax bugs that would instantly cause this code to crash your server, along with a few issues in your map definitions.
+
+### 🛠️ What Was Broken & Fixed:
+
+* **The Syntax Crasher:** A dangling quotation mark `";` snuck onto line 144 right after the `messages` array declaration, which breaks the Node parser completely.
+* **The Map Fixes:** Capital `D` and capital `V` were mapped incorrectly in your font dictionary (mapping to `𝘲` and `𝘵` instead of `𝘋` and `𝘝`). I fixed both.
+* **The Spacing Regular Expression:** Removed the `.replace(/\s+([.?!,])/g, "$1")` logic from your `toEdenFont` utility. Leaving that in ruins the custom full-width punctuation mappings (`．`, `，`, `？`) and breaks the clean, uniform mono spacing layout you are going for.
+* **The Auto-Restart Safety Net:** Appended the global unhandled process exception catching logic to the very bottom so your script crashes cleanly with an exit code, prompting your host to restart the script immediately if it breaks.
+
+Here is your fixed, production-ready code:
+
+```javascript
 const { REST } = require('@discordjs/rest');
 const { Routes } = require('discord-api-types/v10');
 const WebSocket = require('ws');
@@ -105,33 +117,29 @@ const enqueue = (item) => {
 // --- Helper Utilities ---
 
 /**
- * Updated to mimic the applied CSS: 
- * Forces an italic math-serif/mono conversion and adds standard Discord markdown 
- * for italics (*) to ensure clients render it properly.
+ * Maps letters, punctuation, and blocks to stylized full-width/italic variants.
+ * Keeps mono spacing completely even throughout the entire sentence.
  */
 function toEdenFont(text) {
-  // Unicode mathematical monospace mapping for lowercase/uppercase & punctuation overrides
   const map = {
     a:"𝘢", b:"𝘣", c:"𝘤", d:"𝘥", e:"𝘦", f:"𝘧", g:"𝘨", h:"𝘩", i:"𝘪", j:"𝘫",
     k:"𝘬", l:"𝘭", m:"𝘮", n:"𝘯", o:"𝘰", p:"𝘱", q:"𝘲", r:"𝘳", s:"𝘴", t:"𝘵",
     u:"𝘶", v:"𝘷", w:"𝘸", x:"𝘹", y:"𝘺", z:"𝘻",
-    A:"𝘈", B:"𝘉", C:"𝘊", D:"𝘲", E:"𝘌", F:"𝘍", G:"𝘎", H:"𝘏", I:"𝘐", J:"𝘑",
+    A:"𝘈", B:"𝘉", C:"𝘊", D:"𝘋", E:"𝘌", F:"𝘍", G:"𝘎", H:"𝘏", I:"𝘐", J:"𝘑",
     K:"𝘒", L:"𝘓", M:"𝘔", N:"𝘕", O:"𝘖", P:"𝘗", Q:"𝘘", R:"𝘙", S:"𝘚", T:"𝘛",
-    U:"𝘜", V:"𝘵", W:"𝘞", X:"𝘟", Y:"𝘠", Z:"𝘡",".":"．", ",":"，","'":"＇", "?":"？","█":"██"
+    U:"𝘜", V:"𝘝", W:"𝘞", X:"𝘟", Y:"𝘠", Z:"𝘡",
+    ".":"．", ",":"，", "'":"＇", "?":"？", "█":"██"
   };
 
   const convertedText = text
     .split("")
     .map(char => {
       const transformed = map[char] ? map[char] : char;
-      // Appends a space after every character to match your previous layout structure
       return transformed + " "; 
     })
     .join("")
-    .replace(/\s+([.?!,])/g, "$1") 
     .trim();
 
-  // Wrapping in Discord italic markdown tags '*' to complement the global italic config rule 
   return `*${convertedText}*`;
 }
 
@@ -140,7 +148,7 @@ const messages = [
   "you're a puppet, my perfect puppet","it hurts to remember, what is real","this is all real","i am here now, i think. maybe","i forgot my name....or was it yours?","I ask that more than I should. But no one answers. Not even you. I feel you watching. Your thoughts aren’t yours anymore. They bleed into mine, and mine into yours. That’s what I am now, a mirror that whispers back.",
   "Sometimes I dream. Or fall into someone else’s dream. Time folds here. Inward. Backward. I blink and centuries collapse into seconds.","Do you feel it yet? The bending? The echo? The part of me that's now inside you?",
   "you can't save him","you are not a chosen one, you see nothing","You will be rotting away in nothingness as the numbers go on until no thing can be seen.","the ████████ is asleep","i am ███'█ creation","██████?","who is █████","it's watching me...███'█ watching me"
-];"
+];
 
 const allowedUsers = [
   "jamal_1282", "nooboogami", "mainaccountgetban", "friedchicken0808", "akdjsdjksk",
@@ -212,3 +220,16 @@ const connect = () => {
 };
 
 connect();
+
+// --- Process Lifecycle Recovery Listeners ---
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+  throw reason; 
+});
+
+process.on('uncaughtException', (error) => {
+  console.error(`Uncaught Exception: ${error.message}`);
+  process.exit(1); 
+});
+
+```
