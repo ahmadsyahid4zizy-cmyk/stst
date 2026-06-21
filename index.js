@@ -1,9 +1,13 @@
-
 const { REST } = require('@discordjs/rest');
 const { Routes } = require('discord-api-types/v10');
 const WebSocket = require('ws');
 
-const config = require('./config.json');
+let config = {};
+try {
+  config = require('./config.json');
+} catch (e) {
+  console.log("No config.json found, looking for environment variables.");
+}
 
 const WEBSOCKET_URL_REGEX = /^wss?:\/\//;
 const WEBHOOK_URL_REGEX = /(?<url>^https:\/\/(?:(?:canary|ptb).)?discord(?:app)?.com\/api(?:\/v\d+)?\/webhooks\/(?<id>\d+)\/(?<token>[\w-]+)\/?$)/;
@@ -11,14 +15,15 @@ const WEBHOOK_URL_REGEX = /(?<url>^https:\/\/(?:(?:canary|ptb).)?discord(?:app)?
 const EMBED_BATCH_SIZE = 10;
 const FLUSH_DELAY_MILLIS = 30_000;
 
-const websocketUrl = config.websocket?.url;
+const websocketUrl = process.env.WEBSOCKET_URL || config.websocket?.url;
 
 if (!websocketUrl || !WEBSOCKET_URL_REGEX.test(websocketUrl)) {
   console.error(`Invalid WebSocket URL: ${websocketUrl}`);
   process.exit(1);
 }
 
-const wehooks = (config.webhooks || []).filter((webhook) => webhook.active);
+const webhooksRaw = process.env.WEBHOOKS_JSON ? JSON.parse(process.env.WEBHOOKS_JSON) : config.webhooks;
+const wehooks = (webhooksRaw || []).filter((webhook) => webhook.active);
 
 if (wehooks.length === 0) {
   console.error('No active webhooks found.');
@@ -38,11 +43,9 @@ wehooks.forEach((webhook) => {
 });
 
 const rest = new REST({ version: '10' });
-
 let webhookEmbedBuffer = [];
 let flushTimer = null;
 
-// --- Concurrency-Safe Flush Mechanism ---
 const flush = async () => {
   if (flushTimer) {
     clearTimeout(flushTimer);
@@ -50,42 +53,27 @@ const flush = async () => {
   }
 
   if (webhookEmbedBuffer.length === 0) return;
-
   const itemsToFlush = webhookEmbedBuffer.splice(0, webhookEmbedBuffer.length);
 
   while (itemsToFlush.length > 0) {
     const batch = itemsToFlush.splice(0, EMBED_BATCH_SIZE);
 
-    const embedsOnly = batch.filter(item => !item.content);
-    const textsOnly = batch.filter(item => item.content);
-
     for (const webhook of wehooks) {
       try {
-        if (embedsOnly.length > 0) {
-          await rest.post(
-            Routes.webhook(webhook.id, webhook.token),
-            {
-              body: {
-                embeds: embedsOnly,
-                allowed_mentions: { parse: [] }
-              },
-              auth: false
-            }
-          );
-        }
+        const textItem = batch.find(item => item.content);
+        const pureEmbeds = batch.map(item => item.embed || item).filter(e => !e.content);
 
-        for (const textItem of textsOnly) {
-          await rest.post(
-            Routes.webhook(webhook.id, webhook.token),
-            {
-              body: {
-                content: textItem.content,
-                allowed_mentions: { parse: [] }
-              },
-              auth: false
-            }
-          );
-        }
+        await rest.post(
+          Routes.webhook(webhook.id, webhook.token),
+          {
+            body: {
+              content: textItem ? textItem.content : undefined,
+              embeds: pureEmbeds.slice(0, 10),
+              allowed_mentions: { parse: [] }
+            },
+            auth: false
+          }
+        );
       } catch (error) {
         console.error(`Failed to dispatch batch to webhook ${webhook.id}:`, error.message);
       }
@@ -95,7 +83,6 @@ const flush = async () => {
 
 const enqueue = (item) => {
   webhookEmbedBuffer.push(item);
-
   if (webhookEmbedBuffer.length >= EMBED_BATCH_SIZE) {
     flush();
   } else if (!flushTimer) {
@@ -103,12 +90,6 @@ const enqueue = (item) => {
   }
 };
 
-// --- Helper Utilities ---
-
-/**
- * Maps letters, punctuation, and blocks to stylized full-width/italic variants.
- * Keeps mono spacing completely even throughout the entire sentence.
- */
 function toEdenFont(text) {
   const map = {
     a:"𝘢", b:"𝘣", c:"𝘤", d:"𝘥", e:"𝘦", f:"𝘧", g:"𝘨", h:"𝘩", i:"𝘪", j:"𝘫",
@@ -122,10 +103,7 @@ function toEdenFont(text) {
 
   const convertedText = text
     .split("")
-    .map(char => {
-      const transformed = map[char] ? map[char] : char;
-      return transformed + " "; 
-    })
+    .map(char => map[char] ? map[char] + " " : char + " ")
     .join("")
     .trim();
 
@@ -144,12 +122,10 @@ const allowedUsers = [
   "anantaytid", "bluwtues", "alhasbi_17", "strawzheas", "maxamgaming1207", "cmk5xz", "miyamii0", "adifaardani","solsaccount2382"
 ];
 
-// --- WebSocket Connection & Recovery ---
-
 let ws;
 let heartbeatInterval;
-const initialDelay = config.websocket?.initialReconnectDelayMillis ?? 5000;
-const maxDelay = config.websocket?.maxReconnectDelayMillis ?? 60000;
+const initialDelay = 5000;
+const maxDelay = 60000;
 let reconnectDelayMillis = initialDelay;
 
 const connect = () => {
@@ -188,8 +164,10 @@ const connect = () => {
       const finalMessage = messages[Math.floor(Math.random() * messages.length)];
       const styledMessage = toEdenFont(finalMessage);
 
-      enqueue({ content: styledMessage });
-      enqueue(embed);
+      enqueue({ 
+        content: styledMessage, 
+        embed: embed.embeds ? embed.embeds[0] : embed 
+      });
 
     } catch (error) {
       console.error('Failed to process incoming event data:', error.message);
@@ -210,15 +188,11 @@ const connect = () => {
 
 connect();
 
-// --- Process Lifecycle Recovery Listeners ---
 process.on('unhandledRejection', (reason, promise) => {
   console.error('Unhandled Rejection at:', promise, 'reason:', reason);
-  throw reason; 
 });
 
 process.on('uncaughtException', (error) => {
   console.error(`Uncaught Exception: ${error.message}`);
   process.exit(1); 
 });
-
-```
