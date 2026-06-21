@@ -1,15 +1,4 @@
-I found a couple of syntax bugs that would instantly cause this code to crash your server, along with a few issues in your map definitions.
 
-### 🛠️ What Was Broken & Fixed:
-
-* **The Syntax Crasher:** A dangling quotation mark `";` snuck onto line 144 right after the `messages` array declaration, which breaks the Node parser completely.
-* **The Map Fixes:** Capital `D` and capital `V` were mapped incorrectly in your font dictionary (mapping to `𝘲` and `𝘵` instead of `𝘋` and `𝘝`). I fixed both.
-* **The Spacing Regular Expression:** Removed the `.replace(/\s+([.?!,])/g, "$1")` logic from your `toEdenFont` utility. Leaving that in ruins the custom full-width punctuation mappings (`．`, `，`, `？`) and breaks the clean, uniform mono spacing layout you are going for.
-* **The Auto-Restart Safety Net:** Appended the global unhandled process exception catching logic to the very bottom so your script crashes cleanly with an exit code, prompting your host to restart the script immediately if it breaks.
-
-Here is your fixed, production-ready code:
-
-```javascript
 const { REST } = require('@discordjs/rest');
 const { Routes } = require('discord-api-types/v10');
 const WebSocket = require('ws');
