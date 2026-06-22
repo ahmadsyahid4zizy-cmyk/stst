@@ -90,11 +90,16 @@ const enqueue = (item) => {
 
 // --- Helper Utilities ---
 function toEdenFont(text) {
+  // 1. Safety Cutter: If the message text is too long for Discord's font buffer, cut it down!
+  if (text.length > 130) {
+    text = text.substring(0, 125) + "...";
+  }
+
   const map = {
     a:"𝘢", b:"𝘣", c:"𝘤", d:"𝘥", e:"𝘦", f:"𝘧", g:"𝘨", h:"𝘩", i:"𝘪", j:"𝘫",
     k:"𝘬", l:"𝘭", m:"𝘮", n:"𝘯", o:"𝘰", p:"𝘱", q:"𝘲", r:"𝘳", s:"𝘴", t:"𝘵",
     u:"𝘶", v:"𝘷", w:"𝘸", x:"𝘹", y:"𝘺", z:"𝘻",
-    A:"𝘈", B:"𝘉", C:"𝘊", D:"𝘋", E:"𝘌", F:"𝘍", G:"𝘎", H:"𝘏", I:"𝘐", J:"𘘑",
+    A:"𝘈", B:"𝘉", C:"𝘊", D:"𝘋", E:"𝘌", F:"𝘍", G:"𝘎", H:"𝘏", I:"𝘐", J:"𝘑",
     K:"𘘒", L:"𘘓", M:"𝘔", N:"𘘕", O:"𝘖", P:"𘘗", Q:"𘘘", R:"𘘙", S:"𘘚", T:"𘘛",
     U:"𘘜", V:"𘘝", W:"𝘞", X:"𘘟", Y:"𘘠", Z:"𘘡",
     ".":"．", ",":"，", "'":"＇", "?":"？", "█":"██"
